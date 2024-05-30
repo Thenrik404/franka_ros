@@ -22,7 +22,7 @@
 
 namespace franka_example_controllers {
 
-class CartesianImpedanceExampleController : public controller_interface::MultiInterfaceController<
+class DmpController : public controller_interface::MultiInterfaceController<
                                                 franka_hw::FrankaModelInterface,
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
