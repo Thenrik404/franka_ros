@@ -32,6 +32,8 @@
   <depend>pluginlib</depend>
   <depend>realtime_tools</depend>
   <depend>roscpp</depend>
+  <depend>dmpcpp</depend>
+  <depend>base_methods</depend>
   <depend>urdf</depend>
   <depend>visualization_msgs</depend>
 

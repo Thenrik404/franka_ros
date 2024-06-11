@@ -23,6 +23,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   urdf
   visualization_msgs
+  dmpcpp
+  base_methods
 )
 
 find_package(Eigen3 REQUIRED)
@@ -68,6 +70,8 @@ catkin_package(
     roscpp
     urdf
     visualization_msgs
+    dmpcpp
+    base_methods
   DEPENDS Franka
 )
 

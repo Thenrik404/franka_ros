@@ -102,6 +102,16 @@ bool DmpController::init(hardware_interface::RobotHW* robot_hw,
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
 
+  const std::string dpath = "/home/docker/catkin_ws/src/trajectories/my_stuff/dmpcpp";
+  this->dmp_model.reset(
+    new dmp::Ros3dDMP<dmp::KulviciusDMP>{
+      node_handle, "/kulvicius_dmp"
+    }
+  );
+  bool succ;
+  this->dmp_model->init(dpath+"/config");
+  succ = this->dmp_model->load_weights(dpath+"/data/weights.dat");
+
   return true;
 }
 
@@ -126,8 +136,11 @@ void DmpController::starting(const ros::Time& /*time*/) {
   q_d_nullspace_ = q_initial;
 }
 
-void DmpController::update(const ros::Time& /*time*/,
-                                                 const ros::Duration& /*period*/) {
+void DmpController::update(
+  const ros::Time& /*time*/,
+  const ros::Duration& /*period*/
+) 
+{
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
@@ -149,6 +162,16 @@ void DmpController::update(const ros::Time& /*time*/,
   // position error
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_;
+
+  // std::cout<<position.matrix()<<std::endl;
+  // std::cout<<std::endl;
+
+  std::vector<double> S(3), G(3, .7);
+  S.at(0) = position(0);
+  S.at(1) = position(1);
+  S.at(2) = position(2);
+  this->dmp_model->gen_trajectory(S, G, 30.);
+  this->dmp_model->pub_trj_gen();
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {

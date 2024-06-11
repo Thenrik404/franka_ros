@@ -16,6 +16,8 @@
 #include <ros/time.h>
 #include <Eigen/Dense>
 
+#include <dmpcpp/kulvicius.hpp>
+
 #include <franka_example_controllers/compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
 #include <franka_hw/franka_state_interface.h>
@@ -37,6 +39,7 @@ class DmpController : public controller_interface::MultiInterfaceController<
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
 
+    std::unique_ptr<dmp::Ros3dDMP<dmp::KulviciusDMP>> dmp_model;
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
