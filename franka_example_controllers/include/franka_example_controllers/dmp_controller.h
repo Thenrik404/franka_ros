@@ -54,6 +54,9 @@ class DmpController : public controller_interface::MultiInterfaceController<
   Eigen::Matrix<double, 6, 6> cartesian_damping_target_;
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
   Eigen::Vector3d position_d_;
+  Eigen::Vector3d position_d_dmp;
+  double T_dmp = 10000;
+  int t_dmp = (int) this->T_dmp+1;
   Eigen::Quaterniond orientation_d_;
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
@@ -69,6 +72,10 @@ class DmpController : public controller_interface::MultiInterfaceController<
   // Equilibrium pose subscriber
   ros::Subscriber sub_equilibrium_pose_;
   void equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
+
+  // dmp goal pose subscriber
+  ros::Subscriber sub_dmp_goal_;
+  void dmpGoalCallback(const geometry_msgs::PoseStampedConstPtr& msg);
 };
 
 }  // namespace franka_example_controllers

@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /InteractiveMarkers1
         - /MarkerArray1
       Splitter Ratio: 0.5
     Tree Height: 868
@@ -173,19 +174,19 @@ Visualization Manager:
       Visual Enabled: true
     - Class: rviz/InteractiveMarkers
       Enable Transparency: true
-      Enabled: true
+      Enabled: false
       Name: InteractiveMarkers
       Show Axes: false
-      Show Descriptions: true
+      Show Descriptions: false
       Show Visual Aids: false
       Update Topic: /equilibrium_pose_marker/update
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /kulvicius_dmp_gen_marker
       Name: MarkerArray
       Namespaces:
-        {}
+        points: true
       Queue Size: 100
       Value: true
   Enabled: true
@@ -216,7 +217,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 2.5133237838745117
+      Distance: 2.4165730476379395
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -232,9 +233,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.785398006439209
+      Pitch: 0.7303978800773621
       Target Frame: <Fixed Frame>
-      Yaw: 0.785398006439209
+      Yaw: 0.8554027676582336
     Saved: ~
 Window Geometry:
   Displays:

@@ -21,7 +21,13 @@ bool DmpController::init(hardware_interface::RobotHW* robot_hw,
 
   sub_equilibrium_pose_ = node_handle.subscribe(
       "equilibrium_pose", 20, &DmpController::equilibriumPoseCallback, this,
-      ros::TransportHints().reliable().tcpNoDelay());
+      ros::TransportHints().reliable().tcpNoDelay()
+  );
+
+  sub_dmp_goal_ = node_handle.subscribe(
+      "dmp_goal", 20, &DmpController::dmpGoalCallback, this,
+      ros::TransportHints().reliable().tcpNoDelay()
+  );
 
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
@@ -128,6 +134,7 @@ void DmpController::starting(const ros::Time& /*time*/) {
 
   // set equilibrium point to current state
   position_d_ = initial_transform.translation();
+  position_d_dmp = initial_transform.translation();
   orientation_d_ = Eigen::Quaterniond(initial_transform.rotation());
   position_d_target_ = initial_transform.translation();
   orientation_d_target_ = Eigen::Quaterniond(initial_transform.rotation());
@@ -161,17 +168,18 @@ void DmpController::update(
   // compute error to desired pose
   // position error
   Eigen::Matrix<double, 6, 1> error;
-  error.head(3) << position - position_d_;
+  if (this->t_dmp<(int) this->T_dmp-1){
+
+    position_d_dmp(0)=this->dmp_model->dmps.at(0).Y(this->t_dmp);
+    position_d_dmp(1)=this->dmp_model->dmps.at(1).Y(this->t_dmp);
+    position_d_dmp(2)=this->dmp_model->dmps.at(2).Y(this->t_dmp);
+    this->t_dmp++;
+  }
+  error.head(3) << position - position_d_dmp;
+  // error.head(3) << position - position_d_;
 
   // std::cout<<position.matrix()<<std::endl;
   // std::cout<<std::endl;
-
-  std::vector<double> S(3), G(3, .7);
-  S.at(0) = position(0);
-  S.at(1) = position(1);
-  S.at(2) = position(2);
-  this->dmp_model->gen_trajectory(S, G, 30.);
-  this->dmp_model->pub_trj_gen();
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
@@ -194,7 +202,8 @@ void DmpController::update(
 
   // Cartesian PD control with damping ratio = 1
   tau_task << jacobian.transpose() *
-                  (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+    (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+    
   // nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
@@ -252,19 +261,49 @@ void DmpController::complianceParamCallback(
 }
 
 void DmpController::equilibriumPoseCallback(
-    const geometry_msgs::PoseStampedConstPtr& msg) {
+  const geometry_msgs::PoseStampedConstPtr& msg
+){
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
-      position_and_orientation_d_target_mutex_);
+      position_and_orientation_d_target_mutex_
+  );
   position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-      msg->pose.orientation.z, msg->pose.orientation.w;
+  orientation_d_target_.coeffs() << 
+    msg->pose.orientation.x, msg->pose.orientation.y,
+    msg->pose.orientation.z, msg->pose.orientation.w;
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
 }
 
+void DmpController::dmpGoalCallback(
+  const geometry_msgs::PoseStampedConstPtr& msg
+){
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(
+      position_and_orientation_d_target_mutex_
+  );
+  // ROS_INFO_STREAM(msg->pose);
+  std::vector<double> S(3), G(3);
+  franka::RobotState robot_state = state_handle_->getRobotState();
+  Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+  Eigen::Vector3d position(transform.translation());
+
+  S.at(0) = position(0);
+  S.at(1) = position(1);
+  S.at(2) = position(2);
+  G.at(0) = msg->pose.position.x;
+  G.at(1) = msg->pose.position.y;
+  G.at(2) = msg->pose.position.z;
+  this->position_d_dmp(0) = msg->pose.position.x;
+  this->position_d_dmp(1) = msg->pose.position.y;
+  this->position_d_dmp(2) = msg->pose.position.z;
+  this->dmp_model->gen_trajectory(S, G, this->T_dmp);
+  this->dmp_model->pub_trj_gen();
+  this->t_dmp = 0;
+}
+
 }  // namespace franka_example_controllers
+
 
 PLUGINLIB_EXPORT_CLASS(franka_example_controllers::DmpController,
                        controller_interface::ControllerBase)
