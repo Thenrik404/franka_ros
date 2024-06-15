@@ -58,6 +58,7 @@ class DmpController : public controller_interface::MultiInterfaceController<
   Eigen::Vector3d position_d_dmp;
   double T_dmp = 10000;
   int t_dmp = (int) this->T_dmp+1;
+  bool dmp_executing = false;
 
   // error logging
   int step = 0;

@@ -180,26 +180,32 @@ void DmpController::update(
   }
   
   // position error
-  this->error_dmp(0)=this->dmp_model->dmps.at(0).Y((int) this->T_dmp-1)-position(0);
-  this->error_dmp(1)=this->dmp_model->dmps.at(1).Y((int) this->T_dmp-1)-position(1);
-  this->error_dmp(2)=this->dmp_model->dmps.at(2).Y((int) this->T_dmp-1)-position(2);
+  if (this->dmp_executing){
+    this->error_dmp(0)=this->dmp_model->dmps.at(0).Y((int) this->T_dmp-1)-position(0);
+    this->error_dmp(1)=this->dmp_model->dmps.at(1).Y((int) this->T_dmp-1)-position(1);
+    this->error_dmp(2)=this->dmp_model->dmps.at(2).Y((int) this->T_dmp-1)-position(2);
 
-  double epsilon = 0.001;
-  if(this->error_dmp.norm() > epsilon){
-    geometry_msgs::Point ee_pos;
-    ee_pos.x = position(0);
-    ee_pos.y = position(1);
-    ee_pos.z = position(2);
-    this->ee_trj.trajectory.push_back(ee_pos);
-    this->ee_trj.time_points.push_back(ros::Time().now());
+    double epsilon = 0.01;
+    if(this->error_dmp.norm() > epsilon){
+      ROS_INFO_STREAM(this->error_dmp.norm());
+      geometry_msgs::Point ee_pos;
+      ee_pos.x = position(0);
+      ee_pos.y = position(1);
+      ee_pos.z = position(2);
+      this->ee_trj.trajectory.push_back(ee_pos);
+      this->ee_trj.time_points.push_back(ros::Time().now());
+    }
+    else{
+      this->dmp_executing = false;
+    }
   }
   else{
     if (this->step == 1000){
       this->pub_ee_trj.publish(this->ee_trj);
       this->step = 0;
     }
+    this->step++;
   }
-  this->step++;
 
   // set control output
   error.head(3) << position - position_d_dmp;
@@ -328,6 +334,7 @@ void DmpController::dmpGoalCallback(
   this->dmp_model->pub_trj_gen();
   this->t_dmp = 0;
   this->ee_trj.trajectory.clear();
+  this->dmp_executing = true;
 }
 
 }  // namespace franka_example_controllers
