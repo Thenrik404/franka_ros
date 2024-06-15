@@ -25,9 +25,10 @@
 namespace franka_example_controllers {
 
 class DmpController : public controller_interface::MultiInterfaceController<
-                                                franka_hw::FrankaModelInterface,
-                                                hardware_interface::EffortJointInterface,
-                                                franka_hw::FrankaStateInterface> {
+  franka_hw::FrankaModelInterface,
+  hardware_interface::EffortJointInterface,
+  franka_hw::FrankaStateInterface> 
+{
  public:
   bool init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle) override;
   void starting(const ros::Time&) override;
@@ -57,7 +58,14 @@ class DmpController : public controller_interface::MultiInterfaceController<
   Eigen::Vector3d position_d_dmp;
   double T_dmp = 10000;
   int t_dmp = (int) this->T_dmp+1;
+
+  // error logging
+  int step = 0;
+  dmpcpp::Trajectory ee_trj;
+  Eigen::Vector3d error_dmp;
   Eigen::Quaterniond orientation_d_;
+  ros::Publisher pub_ee_trj;
+
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;

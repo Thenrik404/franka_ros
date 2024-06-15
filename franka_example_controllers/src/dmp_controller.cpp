@@ -118,6 +118,8 @@ bool DmpController::init(hardware_interface::RobotHW* robot_hw,
   this->dmp_model->init(dpath+"/config");
   succ = this->dmp_model->load_weights(dpath+"/data/weights.dat");
 
+  this->pub_ee_trj = node_handle.advertise<dmpcpp::Trajectory>("/ee_trj", 10);
+
   return true;
 }
 
@@ -159,14 +161,15 @@ void DmpController::update(
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(  // NOLINT (readability-identifier-naming)
-      robot_state.tau_J_d.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(
+    // NOLINT (readability-identifier-naming)
+    robot_state.tau_J_d.data()
+  );
   Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
   Eigen::Vector3d position(transform.translation());
   Eigen::Quaterniond orientation(transform.rotation());
 
   // compute error to desired pose
-  // position error
   Eigen::Matrix<double, 6, 1> error;
   if (this->t_dmp<(int) this->T_dmp-1){
 
@@ -175,6 +178,30 @@ void DmpController::update(
     position_d_dmp(2)=this->dmp_model->dmps.at(2).Y(this->t_dmp);
     this->t_dmp++;
   }
+  
+  // position error
+  this->error_dmp(0)=this->dmp_model->dmps.at(0).Y((int) this->T_dmp-1)-position(0);
+  this->error_dmp(1)=this->dmp_model->dmps.at(1).Y((int) this->T_dmp-1)-position(1);
+  this->error_dmp(2)=this->dmp_model->dmps.at(2).Y((int) this->T_dmp-1)-position(2);
+
+  double epsilon = 0.001;
+  if(this->error_dmp.norm() > epsilon){
+    geometry_msgs::Point ee_pos;
+    ee_pos.x = position(0);
+    ee_pos.y = position(1);
+    ee_pos.z = position(2);
+    this->ee_trj.trajectory.push_back(ee_pos);
+    this->ee_trj.time_points.push_back(ros::Time().now());
+  }
+  else{
+    if (this->step == 1000){
+      this->pub_ee_trj.publish(this->ee_trj);
+      this->step = 0;
+    }
+  }
+  this->step++;
+
+  // set control output
   error.head(3) << position - position_d_dmp;
   // error.head(3) << position - position_d_;
 
@@ -300,6 +327,7 @@ void DmpController::dmpGoalCallback(
   this->dmp_model->gen_trajectory(S, G, this->T_dmp);
   this->dmp_model->pub_trj_gen();
   this->t_dmp = 0;
+  this->ee_trj.trajectory.clear();
 }
 
 }  // namespace franka_example_controllers
