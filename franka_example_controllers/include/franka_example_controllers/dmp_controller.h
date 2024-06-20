@@ -17,6 +17,8 @@
 #include <Eigen/Dense>
 
 #include <dmpcpp/kulvicius.hpp>
+#include <dmpcpp/online.hpp>
+#include <dmpcpp/LogStamped.h>
 
 #include <franka_example_controllers/compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
@@ -37,10 +39,12 @@ class DmpController : public controller_interface::MultiInterfaceController<
  private:
   // Saturation
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
-      const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
-      const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
+    const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
+    const Eigen::Matrix<double, 7, 1>& tau_J_d
+  );  // NOLINT (readability-identifier-naming)
 
-    std::unique_ptr<dmp::Ros3dDMP<dmp::KulviciusDMP>> dmp_model;
+  // std::unique_ptr<dmp::Ros3dDMP<dmp::KulviciusDMP>> dmp_model;
+  std::unique_ptr<dmp::Ros3dDMP<dmp::OnlineDMP>> dmp_model;
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
@@ -56,16 +60,19 @@ class DmpController : public controller_interface::MultiInterfaceController<
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
   Eigen::Vector3d position_d_;
   Eigen::Vector3d position_d_dmp;
+  Eigen::Vector3d convergency_error;
   double T_dmp = 10000;
   int t_dmp = (int) this->T_dmp+1;
   bool dmp_executing = false;
+  std::vector<double> S_dmp, G_dmp;
 
   // error logging
   int step = 0;
-  dmpcpp::Trajectory ee_trj;
+  // dmpcpp::Trajectory ee_trj;
+  dmpcpp::LogStamped ctl_log;
   Eigen::Vector3d error_dmp;
   Eigen::Quaterniond orientation_d_;
-  ros::Publisher pub_ee_trj;
+  ros::Publisher pub_ctl_log;
 
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
@@ -75,8 +82,10 @@ class DmpController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
-  void complianceParamCallback(franka_example_controllers::compliance_paramConfig& config,
-                               uint32_t level);
+  void complianceParamCallback(
+    franka_example_controllers::compliance_paramConfig& config,
+    uint32_t level
+  );
 
   // Equilibrium pose subscriber
   ros::Subscriber sub_equilibrium_pose_;

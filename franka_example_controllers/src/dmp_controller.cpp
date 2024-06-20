@@ -14,8 +14,10 @@
 
 namespace franka_example_controllers {
 
-bool DmpController::init(hardware_interface::RobotHW* robot_hw,
-                                               ros::NodeHandle& node_handle) {
+bool DmpController::init(
+  hardware_interface::RobotHW* robot_hw,
+  ros::NodeHandle& node_handle
+){
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
@@ -85,20 +87,20 @@ bool DmpController::init(hardware_interface::RobotHW* robot_hw,
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
       ROS_ERROR_STREAM(
-          "DmpController: Exception getting joint handles: " << ex.what());
+        "DmpController: Exception getting joint handles: " << ex.what());
       return false;
     }
   }
 
   dynamic_reconfigure_compliance_param_node_ =
-      ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
+    ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
 
   dynamic_server_compliance_param_ = std::make_unique<
-      dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>(
+    dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>(
 
-      dynamic_reconfigure_compliance_param_node_);
+    dynamic_reconfigure_compliance_param_node_);
   dynamic_server_compliance_param_->setCallback(
-      boost::bind(&DmpController::complianceParamCallback, this, _1, _2));
+    boost::bind(&DmpController::complianceParamCallback, this, _1, _2));
 
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
@@ -109,16 +111,23 @@ bool DmpController::init(hardware_interface::RobotHW* robot_hw,
   cartesian_damping_.setZero();
 
   const std::string dpath = "/home/docker/catkin_ws/src/trajectories/my_stuff/dmpcpp";
+  // this->dmp_model.reset(
+  //   new dmp::Ros3dDMP<dmp::KulviciusDMP>{
+  //     node_handle, "/kulvicius_dmp"
+  //   }
+  // );
   this->dmp_model.reset(
-    new dmp::Ros3dDMP<dmp::KulviciusDMP>{
+    new dmp::Ros3dDMP<dmp::OnlineDMP>{
       node_handle, "/kulvicius_dmp"
     }
   );
+  this->S_dmp = std::vector<double>(3);
+  this->G_dmp = std::vector<double>(3);
   bool succ;
   this->dmp_model->init(dpath+"/config");
   succ = this->dmp_model->load_weights(dpath+"/data/weights.dat");
 
-  this->pub_ee_trj = node_handle.advertise<dmpcpp::Trajectory>("/ee_trj", 10);
+  this->pub_ctl_log = node_handle.advertise<dmpcpp::LogStamped>("/ee_log", 100);
 
   return true;
 }
@@ -169,50 +178,39 @@ void DmpController::update(
   Eigen::Vector3d position(transform.translation());
   Eigen::Quaterniond orientation(transform.rotation());
 
-  // compute error to desired pose
-  Eigen::Matrix<double, 6, 1> error;
-  if (this->t_dmp<(int) this->T_dmp-1){
-
-    position_d_dmp(0)=this->dmp_model->dmps.at(0).Y(this->t_dmp);
-    position_d_dmp(1)=this->dmp_model->dmps.at(1).Y(this->t_dmp);
-    position_d_dmp(2)=this->dmp_model->dmps.at(2).Y(this->t_dmp);
-    this->t_dmp++;
-  }
-  
-  // position error
-  if (this->dmp_executing){
-    this->error_dmp(0)=this->dmp_model->dmps.at(0).Y((int) this->T_dmp-1)-position(0);
-    this->error_dmp(1)=this->dmp_model->dmps.at(1).Y((int) this->T_dmp-1)-position(1);
-    this->error_dmp(2)=this->dmp_model->dmps.at(2).Y((int) this->T_dmp-1)-position(2);
-
-    double epsilon = 0.01;
-    if(this->error_dmp.norm() > epsilon){
-      ROS_INFO_STREAM(this->error_dmp.norm());
-      geometry_msgs::Point ee_pos;
-      ee_pos.x = position(0);
-      ee_pos.y = position(1);
-      ee_pos.z = position(2);
-      this->ee_trj.trajectory.push_back(ee_pos);
-      this->ee_trj.time_points.push_back(ros::Time().now());
-    }
-    else{
-      this->dmp_executing = false;
-    }
-  }
-  else{
-    if (this->step == 1000){
-      this->pub_ee_trj.publish(this->ee_trj);
-      this->step = 0;
-    }
-    this->step++;
-  }
-
   // set control output
+  // compute error to last desired pose (trigger phase stopping)
+  Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_dmp;
+  this->dmp_model->set_error(error);
   // error.head(3) << position - position_d_;
 
-  // std::cout<<position.matrix()<<std::endl;
-  // std::cout<<std::endl;
+// TODO
+  // check convergency
+  this->convergency_error= -position;
+  this->convergency_error(0)+=this->G_dmp.at(0);
+  this->convergency_error(1)+=this->G_dmp.at(1);
+  this->convergency_error(2)+=this->G_dmp.at(2);
+
+  if (this->convergency_error.norm() > 0.01 && this->dmp_executing){
+    this->dmp_model->step();
+    // log positions
+    position_d_dmp(0)=this->dmp_model->dmps.at(0).y;
+    position_d_dmp(1)=this->dmp_model->dmps.at(1).y;
+    position_d_dmp(2)=this->dmp_model->dmps.at(2).y;
+
+    this->ctl_log.pt_d.x = position_d_dmp(0);
+    this->ctl_log.pt_d.y = position_d_dmp(1);
+    this->ctl_log.pt_d.z = position_d_dmp(2);
+    this->ctl_log.pt_is.x = position(0);
+    this->ctl_log.pt_is.y = position(1);
+    this->ctl_log.pt_is.z = position(2);
+    this->ctl_log.stamp = ros::Time().now();
+    this->pub_ctl_log.publish(this->ctl_log);
+  }
+
+  // set new control output
+  error.head(3) << position - position_d_dmp;
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
@@ -244,6 +242,7 @@ void DmpController::update(
                         (2.0 * sqrt(nullspace_stiffness_)) * dq);
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
+  // tau_d << tau_task + coriolis;
   // Saturate torque rate to avoid discontinuities
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
   for (size_t i = 0; i < 7; ++i) {
@@ -315,25 +314,21 @@ void DmpController::dmpGoalCallback(
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_
   );
-  // ROS_INFO_STREAM(msg->pose);
-  std::vector<double> S(3), G(3);
   franka::RobotState robot_state = state_handle_->getRobotState();
   Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
   Eigen::Vector3d position(transform.translation());
 
-  S.at(0) = position(0);
-  S.at(1) = position(1);
-  S.at(2) = position(2);
-  G.at(0) = msg->pose.position.x;
-  G.at(1) = msg->pose.position.y;
-  G.at(2) = msg->pose.position.z;
-  this->position_d_dmp(0) = msg->pose.position.x;
-  this->position_d_dmp(1) = msg->pose.position.y;
-  this->position_d_dmp(2) = msg->pose.position.z;
-  this->dmp_model->gen_trajectory(S, G, this->T_dmp);
+  this->S_dmp.at(0) = position(0);
+  this->S_dmp.at(1) = position(1);
+  this->S_dmp.at(2) = position(2);
+  this->G_dmp.at(0) = msg->pose.position.x;
+  this->G_dmp.at(1) = msg->pose.position.y;
+  this->G_dmp.at(2) = msg->pose.position.z;
+  this->dmp_model->gen_trajectory(
+    this->S_dmp, this->G_dmp, this->T_dmp);
   this->dmp_model->pub_trj_gen();
-  this->t_dmp = 0;
-  this->ee_trj.trajectory.clear();
+  this->dmp_model->reset_dmps(
+    this->S_dmp, this->G_dmp, this->T_dmp);
   this->dmp_executing = true;
 }
 
