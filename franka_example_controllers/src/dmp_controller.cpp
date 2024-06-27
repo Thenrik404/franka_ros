@@ -14,10 +14,40 @@
 
 namespace franka_example_controllers {
 
+// TODO: fix hardcoding
+void compute_nullspace(
+  const std::vector<joint_limits_interface::JointLimits>& jlimits,
+  const Eigen::Map<Eigen::Matrix<double, 7, 1>, 0>& q,
+  const Eigen::Map<Eigen::Matrix<double, 7, 1>>& dq,
+  Eigen::VectorXd& tau_nullspace){
+
+  double q_mean;
+  tau_nullspace.resize(7);
+  const double w_q = .1;
+  const double w_dq = .1;
+  for (std::size_t i=0; i<7; i++)
+  {
+    std::cout<<q(i)<<" ";
+    q_mean = jlimits.at(i).max_position-jlimits.at(i).min_position;
+    tau_nullspace(i) = -w_q*(q(i)-q_mean/2)/q_mean-w_dq*dq(i);
+    // tau_nullspace(i) = -w_q*(q(i)-q_mean/2)/q_mean;
+  }
+  std::cout<<std::endl;
+
+};
+
+
 bool DmpController::init(
-  hardware_interface::RobotHW* robot_hw,
+  hardware_interface::RobotHW* robot_hw, // ros
   ros::NodeHandle& node_handle
 ){
+
+
+  // ! Set the logger level to debug
+  if(ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+      ros::console::notifyLoggerLevelsChanged();
+  }
+
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
@@ -85,6 +115,12 @@ bool DmpController::init(
   for (size_t i = 0; i < 7; ++i) {
     try {
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
+      joint_limits_interface::JointLimits limits;
+      const bool rosparam_limits_ok = joint_limits_interface::getJointLimits(
+        joint_names[i], node_handle, limits
+      );
+      this->jlimits.push_back(limits);
+      
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
       ROS_ERROR_STREAM(
         "DmpController: Exception getting joint handles: " << ex.what());
@@ -111,16 +147,16 @@ bool DmpController::init(
   cartesian_damping_.setZero();
 
   const std::string dpath = "/home/docker/catkin_ws/src/trajectories/my_stuff/dmpcpp";
-  // this->dmp_model.reset(
-  //   new dmp::Ros3dDMP<dmp::KulviciusDMP>{
-  //     node_handle, "/kulvicius_dmp"
-  //   }
-  // );
   this->dmp_model.reset(
-    new dmp::Ros3dDMP<dmp::OnlineDMP>{
+    new dmp::Ros3dDMP<dmp::KulviciusDMP>{
       node_handle, "/kulvicius_dmp"
     }
   );
+  // this->dmp_model.reset(
+  //   new dmp::Ros3dDMP<dmp::OnlineDMP>{
+  //     node_handle, "/kulvicius_dmp"
+  //   }
+  // );
   this->S_dmp = std::vector<double>(3);
   this->G_dmp = std::vector<double>(3);
   bool succ;
@@ -182,17 +218,20 @@ void DmpController::update(
   // compute error to last desired pose (trigger phase stopping)
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_dmp;
-  this->dmp_model->set_error(error);
+  // this->dmp_model->set_error(error.head(3));
   // error.head(3) << position - position_d_;
+  // ROS_INFO_STREAM(error.head(3).matrix());
 
-// TODO
+
   // check convergency
   this->convergency_error= -position;
   this->convergency_error(0)+=this->G_dmp.at(0);
   this->convergency_error(1)+=this->G_dmp.at(1);
   this->convergency_error(2)+=this->G_dmp.at(2);
 
+  // ROS_INFO_STREAM(this->convergency_error);
   if (this->convergency_error.norm() > 0.01 && this->dmp_executing){
+  // if (this->dmp_executing){
     this->dmp_model->step();
     // log positions
     position_d_dmp(0)=this->dmp_model->dmps.at(0).y;
@@ -211,6 +250,7 @@ void DmpController::update(
 
   // set new control output
   error.head(3) << position - position_d_dmp;
+  // ROS_INFO_STREAM(error.head(3).matrix());
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
@@ -232,17 +272,21 @@ void DmpController::update(
   pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
 
   // Cartesian PD control with damping ratio = 1
-  tau_task << jacobian.transpose() *
-    (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+  tau_task << jacobian.transpose() *(
+    -cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq)
+  );
     
   // nullspace PD control with damping ratio = 1
-  tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                    jacobian.transpose() * jacobian_transpose_pinv) *
-                       (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-                        (2.0 * sqrt(nullspace_stiffness_)) * dq);
+  // tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
+  //                   jacobian.transpose() * jacobian_transpose_pinv) *
+  //                      (nullspace_stiffness_ * (q_d_nullspace_ - q) -
+  //                       (2.0 * sqrt(nullspace_stiffness_)) * dq);
+
+  compute_nullspace(this->jlimits, q, dq, tau_nullspace);
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
   // tau_d << tau_task + coriolis;
+  // tau_d << coriolis;
   // Saturate torque rate to avoid discontinuities
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
   for (size_t i = 0; i < 7; ++i) {
@@ -327,7 +371,7 @@ void DmpController::dmpGoalCallback(
   this->dmp_model->gen_trajectory(
     this->S_dmp, this->G_dmp, this->T_dmp);
   this->dmp_model->pub_trj_gen();
-  this->dmp_model->reset_dmps(
+  this->dmp_model->reset(
     this->S_dmp, this->G_dmp, this->T_dmp);
   this->dmp_executing = true;
 }

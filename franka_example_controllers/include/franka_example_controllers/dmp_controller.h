@@ -23,6 +23,10 @@
 #include <franka_example_controllers/compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
 #include <franka_hw/franka_state_interface.h>
+ 
+#include <joint_limits_interface/joint_limits.h>
+#include <joint_limits_interface/joint_limits_interface.h>
+#include <joint_limits_interface/joint_limits_rosparam.h>
 
 namespace franka_example_controllers {
 
@@ -43,8 +47,6 @@ class DmpController : public controller_interface::MultiInterfaceController<
     const Eigen::Matrix<double, 7, 1>& tau_J_d
   );  // NOLINT (readability-identifier-naming)
 
-  // std::unique_ptr<dmp::Ros3dDMP<dmp::KulviciusDMP>> dmp_model;
-  std::unique_ptr<dmp::Ros3dDMP<dmp::OnlineDMP>> dmp_model;
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
@@ -61,6 +63,9 @@ class DmpController : public controller_interface::MultiInterfaceController<
   Eigen::Vector3d position_d_;
   Eigen::Vector3d position_d_dmp;
   Eigen::Vector3d convergency_error;
+
+  std::unique_ptr<dmp::Ros3dDMP<dmp::KulviciusDMP>> dmp_model;
+  // std::unique_ptr<dmp::Ros3dDMP<dmp::OnlineDMP>> dmp_model;
   double T_dmp = 10000;
   int t_dmp = (int) this->T_dmp+1;
   bool dmp_executing = false;
@@ -68,7 +73,6 @@ class DmpController : public controller_interface::MultiInterfaceController<
 
   // error logging
   int step = 0;
-  // dmpcpp::Trajectory ee_trj;
   dmpcpp::LogStamped ctl_log;
   Eigen::Vector3d error_dmp;
   Eigen::Quaterniond orientation_d_;
@@ -77,6 +81,10 @@ class DmpController : public controller_interface::MultiInterfaceController<
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;
+
+  // custom nullspace
+  std::vector<joint_limits_interface::JointLimits> jlimits;
+
 
   // Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>
