@@ -39,6 +39,11 @@
       A controller that renders a spring damper system in cartesian space. Compliance parameters and the equilibrium pose can be modified online with dynamic reconfigure and an interactive marker respectively.
     </description>
   </class>
+  <class name="franka_example_controllers/CartesianImpedanceController1" type="franka_example_controllers::CartesianImpedanceController1" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller redering a spring damper system with adaptive nullspace.
+    </description>
+  </class>
   <class name="franka_example_controllers/DmpController" type="franka_example_controllers::DmpController" base_class_type="controller_interface::ControllerBase">
     <description>
       A controller that moves the robot acording to a dmp.

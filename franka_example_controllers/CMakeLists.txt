@@ -23,10 +23,11 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   urdf
   visualization_msgs
-  dmpcpp
-  base_methods
+  # dmpcpp
+  base_methods # added
+  kdl_parser
 )
-
+# find_package(yaml-cpp REQUIRED) # added
 find_package(Eigen3 REQUIRED)
 find_package(Franka 0.9.0 QUIET)
 if(NOT Franka_FOUND)
@@ -70,8 +71,9 @@ catkin_package(
     roscpp
     urdf
     visualization_msgs
-    dmpcpp
-    base_methods
+    # dmpcpp
+    base_methods # added
+    kdl_parser
   DEPENDS Franka
 )
 
@@ -84,7 +86,9 @@ add_library(franka_example_controllers
   src/model_example_controller.cpp
   src/joint_impedance_example_controller.cpp
   src/cartesian_impedance_example_controller.cpp
-  src/dmp_controller.cpp
+  src/cartesian_impedance_controller_1.cpp # added
+  src/joint_sampler.cpp # added
+  # src/dmp_controller.cpp
   src/force_example_controller.cpp
   src/dual_arm_cartesian_impedance_example_controller.cpp
   src/teleop_joint_pd_example_controller.cpp
@@ -102,11 +106,13 @@ add_dependencies(franka_example_controllers
 target_link_libraries(franka_example_controllers PUBLIC
   ${Franka_LIBRARIES}
   ${catkin_LIBRARIES}
+  # yaml-cpp # added
 )
 
 target_include_directories(franka_example_controllers SYSTEM PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
+  # ${YAML_INCLUDE_DIRS} # added
 )
 target_include_directories(franka_example_controllers PUBLIC
   include

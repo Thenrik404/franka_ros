@@ -32,10 +32,11 @@
   <depend>pluginlib</depend>
   <depend>realtime_tools</depend>
   <depend>roscpp</depend>
-  <depend>dmpcpp</depend>
-  <depend>base_methods</depend>
+  <!-- <depend>dmpcpp</depend> -->
   <depend>urdf</depend>
   <depend>visualization_msgs</depend>
+  <depend>base_methods</depend>
+  <depend>kdl_parser</depend>
 
   <exec_depend>franka_control</exec_depend>
   <exec_depend>franka_description</exec_depend>
